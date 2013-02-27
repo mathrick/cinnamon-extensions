@@ -27,6 +27,7 @@ const Applet = imports.ui.applet;
 const PopupMenu = imports.ui.popupMenu;
 const Util = imports.misc.util;
 const Gio = imports.gi.Gio;
+const St = imports.gi.St;
 const Input = imports.ui.appletManager.applets["TouchpadIndicatorClassic@lusito.info"].input;
 const AppletMeta = imports.ui.appletManager.appletMeta["TouchpadIndicatorClassic@lusito.info"];
 const AppletDir = AppletMeta.path;
@@ -128,6 +129,13 @@ TouchpadIndicator.prototype = {
         this.createToggleEntry("Disable on exit", "on-exit-disable");
         this.createToggleEntry("Disable on start", "on-start-disable");
         this.createToggleEntry("Show notifications", "show-notifications");
+        
+        this._applet_context_menu.addAction("Copy XInput info to clipboard", Lang.bind(this, this._onDumpInfo));
+    },
+    
+    _onDumpInfo: function() {
+        let clipboard = St.Clipboard.get_default();
+        clipboard.set_text(this.input.getDump());
     },
 
     createToggleEntry: function(text, key) {

@@ -54,6 +54,30 @@ XInputManager.prototype = {
                 this.mice.push(all[i]);
         }
     },
+    
+    getDump: function() {
+        let all = this.getAllPointerIds();
+        let dump = [];
+        for (let i = 0; i < all.length; i++) {
+            let node = this.getDeviceNode(all[i]);
+            if(node) {
+                dump.push('Node:  ' + all[i]);
+                dump.push('udevadm info --query=env --name=' + node);
+                let lines = execute_sync('udevadm info --query=env --name=' + node);
+                if (lines) {
+                    lines = lines[1].toString().split('\n');
+                    for (let line = 0; line < lines.length; line++)
+                        dump.push(lines[line]);
+                } else {
+                    dump.push('no result');
+                }
+            } else {
+                dump.push('No device node: ' + all[i]);
+            }
+            dump.push('======================');
+        }
+        return dump.join('\n');
+    },
 
     getAllPointerIds: function() {
         var devids = new Array();
