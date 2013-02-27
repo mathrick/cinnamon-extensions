@@ -46,6 +46,8 @@ XInputManager.prototype = {
         let all = this.getAllPointerIds();
         for (let i = 0; i < all.length; i++) {
             let info = this.getDeviceInfo(all[i]);
+            if(info == null)
+                continue;
             if(info.touchscreen)
                 this.touchscreens.push(all[i]);
             else if(info.touchpad)
@@ -58,6 +60,16 @@ XInputManager.prototype = {
     getDump: function() {
         let all = this.getAllPointerIds();
         let dump = [];
+        
+        dump.push('xinput list');
+        let lines = execute_sync('xinput --list');
+        if (lines) {
+            lines = lines[1].toString().split('\n');
+            for (let line = 0; line < lines.length; line++)
+                dump.push(lines[line]);
+        }
+        dump.push('======================');
+    
         for (let i = 0; i < all.length; i++) {
             let node = this.getDeviceNode(all[i]);
             if(node) {
@@ -97,6 +109,9 @@ XInputManager.prototype = {
 
     getDeviceInfo: function(id) {
         let node = this.getDeviceNode(id);
+        if(node == null)
+            return null;
+        
         let lines = execute_sync('udevadm info --query=env --name=' + node);
         let result = { touchscreen: false, touchpad: false, mouse: false };
         if (lines) {
