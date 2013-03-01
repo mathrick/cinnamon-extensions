@@ -23,18 +23,27 @@
  */
 
 const Lang = imports.lang;
+const DBus = imports.dbus;
 const Applet = imports.ui.applet;
 const PopupMenu = imports.ui.popupMenu;
 const Util = imports.misc.util;
 const Gio = imports.gi.Gio;
 const St = imports.gi.St;
-const Input = imports.ui.appletManager.applets["TouchpadIndicatorClassic@lusito.info"].input;
+const AppletImports = imports.ui.appletManager.applets["TouchpadIndicatorClassic@lusito.info"];
+const AppletDBus = AppletImports.appletDBus;
+const Input = AppletImports.input;
 const AppletMeta = imports.ui.appletManager.appletMeta["TouchpadIndicatorClassic@lusito.info"];
 const AppletDir = AppletMeta.path;
 const ConfigFile = AppletDir + '/config.js';
 
 const TP_ICON = 'input-touchpad';
 const TP_ICON_DISABLED = 'touchpad-disabled';
+
+const ShutdownListenerInterface = {
+    name: 'info.Lusito.ShutdownListener',
+    methods: [],
+    signals: [{ name: 'Shutdown', inSignature: '' } ]
+};
 
 function TouchpadIndicator(orientation) {
     this._init(orientation);
@@ -47,6 +56,7 @@ TouchpadIndicator.prototype = {
         Applet.IconApplet.prototype._init.call(this, orientation);
 
         try {
+            this._dbus = null;
             this.orientation = orientation;
             this.set_applet_tooltip(_("Touchpad Indicator"));
 
@@ -80,6 +90,7 @@ TouchpadIndicator.prototype = {
     },
     
     onStartup: function() {
+        Util.spawnCommandLine("python " + AppletDir + "/shutdownListener.py");
         this.loadConfigFile();
 
         if(this.config['on-start-disable'])
@@ -93,23 +104,30 @@ TouchpadIndicator.prototype = {
         this.file_watches = new Array();
         this.addFileWatch("/dev/input/by-path", this.onMousePlugged);
         this.addFileWatch(ConfigFile, this.loadConfigFile);
-
-        // Watch for window destruction signals
-        global.window_manager.connect('destroy', Lang.bind(this, this.onDestroy));
+        
+        DBus.session.watch_name('info.Lusito.ShutdownListener', false, Lang.bind(this, this.onShutdownListenerAppeared), null);
+        
+        if(this._dbus == null)
+            this._dbus = new AppletDBus.AppletDBus(this);
     },
 
+    onShutdownListenerAppeared: function() {
+        let ShutdownListenerClass = DBus.makeProxyClass(ShutdownListenerInterface);
+        let proxy = new ShutdownListenerClass(DBus.session, 'info.Lusito.ShutdownListener', '/info/Lusito/ShutdownListener');
+        proxy.connect('Shutdown', Lang.bind(this, this.onShutdown));
+    },
+    
     onShutdown: function() {
+        if(this._dbus != null) {
+            this._dbus.destroy();
+            this._dbus = null;
+        }
+        
         this.removeFileWatches();
         if(this.config['on-exit-enable'])
             this.enableTouchpad(true);
         else if(this.config['on-exit-disable'])
             this.enableTouchpad(false);
-    },
-
-    onDestroy: function(wm, actor) {
-        // Only shut down when the actor is {}, which is the window manager itself
-        if(!actor.hasOwnProperty('_notifyWindowTypeSignalId'))
-            this.onShutdown();
     },
 
     notify: function(icon, title, message, force) {
@@ -144,6 +162,10 @@ TouchpadIndicator.prototype = {
         entry.connect('toggled', Lang.bind(this, this.onToggleSetting));
         this.menu.addMenuItem(entry);
         this._toggleItems[key] = entry;
+    },
+    
+    toggleSetting: function(key) {
+        this._toggleItems[key].toggle();
     },
 
     onToggleSetting: function(item) {
