@@ -26,6 +26,7 @@ const Lang = imports.lang;
 const DBus = imports.dbus;
 const Applet = imports.ui.applet;
 const PopupMenu = imports.ui.popupMenu;
+const Tooltips = imports.ui.tooltips;
 const Util = imports.misc.util;
 const Gio = imports.gi.Gio;
 const St = imports.gi.St;
@@ -77,6 +78,8 @@ TouchpadIndicator.prototype = {
     on_applet_clicked: function(event) {
         for(key in this._toggleItems)
             this._toggleItems[key].setToggleState(this.config[key]);
+        
+        this._updateTrackpointPopup();
 
         this.menu.toggle();
     },
@@ -93,6 +96,8 @@ TouchpadIndicator.prototype = {
         Util.spawnCommandLine("python " + AppletDir + "/shutdownListener.py");
         this.loadConfigFile();
 
+        this.input.refresh(this.config);
+        
         if(this.config['on-start-disable'])
             this.enableTouchpad(false);
         else
@@ -147,8 +152,55 @@ TouchpadIndicator.prototype = {
         this.createToggleEntry("Disable on exit", "on-exit-disable");
         this.createToggleEntry("Disable on start", "on-start-disable");
         this.createToggleEntry("Show notifications", "show-notifications");
+        this.trackpointPopup = new PopupMenu.PopupSubMenuMenuItem(_("Mark device as trackpoint"));
+        this.trackpointPopup._tooltip = new Tooltips.Tooltip(this.trackpointPopup.actor, "Use if your trackpoint prevents the touchpad from being re-enabled");
+        this.menu.addMenuItem(this.trackpointPopup);
         
         this._applet_context_menu.addAction("Copy XInput info to clipboard", Lang.bind(this, this._onDumpInfo));
+    },
+
+    _updateTrackpointPopup: function() {
+        let menu = this.trackpointPopup.menu;
+        menu.removeAll();
+        let addedDeviceNames = [];
+        let fakeList = this.config.fakeTrackpoints;
+        this._updateTrackpointPopupDevices(menu, addedDeviceNames, fakeList, this.input.mice);
+        this._updateTrackpointPopupDevices(menu, addedDeviceNames, fakeList, this.input.trackpoints);
+    
+        for (let i=fakeList.length-1; i>=0; i--) {
+            let fake = fakeList[i];
+            if (addedDeviceNames.indexOf(fake) == -1) {
+                menu.addAction(_("Remove ") + fake, Lang.bind(this, function() {
+                    this._removeAllFromArray(fakeList, fake);
+                    this.storeConfigFile();
+                }));
+            }
+        }
+    },
+    
+    _updateTrackpointPopupDevices: function(menu, addedDeviceNames, fakeList, devices) {
+        for(let i=0; i<devices.length; i++) {
+            let device = devices[i];
+            addedDeviceNames.push(device.name);
+            
+            let entry = new PopupMenu.PopupSwitchMenuItem(device.name, fakeList.indexOf(device.name) != -1);
+            entry.connect('toggled', Lang.bind(this, function() {
+                if(entry.state)
+                    fakeList.push(device.name);
+                else
+                    this._removeAllFromArray(fakeList, device.name);
+                this.storeConfigFile();
+            }));
+            menu.addMenuItem(entry);
+            this._toggleItems[key] = entry;
+        }
+    },
+    
+    _removeAllFromArray: function(array, item) {
+        for (let i=array.length-1; i>=0; i--) {
+            if (array[i] == item)
+                array.splice(i, 1);
+        }
     },
     
     _onDumpInfo: function() {
@@ -194,6 +246,8 @@ TouchpadIndicator.prototype = {
                 [flag, data] = file.load_contents(null);
                 if(flag) {
                     this.config = eval('(' + data + ')');
+                    if(!this.config.fakeTrackpoints)
+                        this.config.fakeTrackpoints = [];
                     this.onConfigUpdate();
                     return;
                 }
@@ -215,7 +269,7 @@ TouchpadIndicator.prototype = {
 
     onMousePlugged: function() {
         if (this.onMouseDisable === true) {
-            this.input.refresh();
+            this.input.refresh(this.config);
             let has_mouse = this.input.mice.length > 0;
 
             if (has_mouse && this.isTouchpadEnabled()) {

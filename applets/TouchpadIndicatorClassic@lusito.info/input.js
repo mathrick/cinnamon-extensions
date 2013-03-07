@@ -34,102 +34,40 @@ function execute_sync(command) {
     }
 }
 
-function XInputManager() {
-    this.refresh();
+function XInputPointerDevice(name, id) {
+    this._init(name, id);
 }
 
-XInputManager.prototype = {
-    refresh: function() {
-        this.touchscreens = [];
-        this.touchpads = [];
-        this.mice = [];
-        let all = this.getAllPointerIds();
-        for (let i = 0; i < all.length; i++) {
-            let info = this.getDeviceInfo(all[i]);
-            if(info == null)
-                continue;
-            if(info.touchscreen)
-                this.touchscreens.push(all[i]);
-            else if(info.touchpad)
-                this.touchpads.push(all[i]);
-            else if(info.mouse)
-                this.mice.push(all[i]);
-        }
+XInputPointerDevice.prototype = {
+    _init: function(name, id) {
+        this.name = name;
+        this.id = id;
+        this.node = this.readNode();
+        this.updateInfo();
     },
     
-    getDump: function() {
-        let all = this.getAllPointerIds();
-        let dump = [];
+    updateInfo: function() {
+        this.touchscreen = this.touchpad = this.mouse = false;
         
-        dump.push('xinput list');
-        let lines = execute_sync('xinput --list');
-        if (lines) {
-            lines = lines[1].toString().split('\n');
-            for (let line = 0; line < lines.length; line++)
-                dump.push(lines[line]);
-        }
-        dump.push('======================');
-    
-        for (let i = 0; i < all.length; i++) {
-            let node = this.getDeviceNode(all[i]);
-            if(node) {
-                dump.push('Node:  ' + all[i]);
-                dump.push('udevadm info --query=env --name=' + node);
-                let lines = execute_sync('udevadm info --query=env --name=' + node);
-                if (lines) {
-                    lines = lines[1].toString().split('\n');
-                    for (let line = 0; line < lines.length; line++)
-                        dump.push(lines[line]);
-                } else {
-                    dump.push('no result');
-                }
-            } else {
-                dump.push('No device node: ' + all[i]);
-            }
-            dump.push('======================');
-        }
-        return dump.join('\n');
-    },
+        if(this.node) {
+            let lines = execute_sync('udevadm info --query=env --name=' + this.node);
 
-    getAllPointerIds: function() {
-        var devids = new Array();
-        let lines = execute_sync('xinput --list');
-        if (lines) {
-            lines = lines[1].toString().split('\n');
-            for (let line = 0; line < lines.length; line++) {
-                if (lines[line].indexOf('pointer')!=-1) {
-                    let match = /\sid=([0-9]+)/g.exec(lines[line]);
-                    if(match)
-                        devids.push(match[1]);
+            if (lines) {
+                lines = lines[1].toString().split('\n');
+                for (let line = 0; line < lines.length; line++) {
+                    if (lines[line].indexOf('ID_INPUT_TOUCHSCREEN=1') == 0)
+                        this.touchscreen = true;
+                    else if (lines[line].indexOf('ID_INPUT_TOUCHPAD=1') == 0)
+                        this.touchpad = true;
+                    else if (lines[line].indexOf('ID_INPUT_MOUSE=1') == 0)
+                        this.mouse = true;
                 }
             }
         }
-        return devids;
-    },
-
-    getDeviceInfo: function(id) {
-        let node = this.getDeviceNode(id);
-        if(node == null)
-            return null;
-        
-        let lines = execute_sync('udevadm info --query=env --name=' + node);
-        let result = { touchscreen: false, touchpad: false, mouse: false };
-        if (lines) {
-            lines = lines[1].toString().split('\n');
-            for (let line = 0; line < lines.length; line++) {
-                if (lines[line].indexOf('ID_INPUT_TOUCHSCREEN=1')==0)
-                    result.touchscreen = true;
-                else if (lines[line].indexOf('ID_INPUT_TOUCHPAD=1')==0)
-                    result.touchpad = true;
-                else if (lines[line].indexOf('ID_INPUT_MOUSE=1')==0)
-                    result.mouse = true;
-            }
-        }
-        return result;
     },
     
-    getDeviceNode: function(id) {
-        let lines = execute_sync('xinput --list-props ' + id);
+    readNode: function() {
+        let lines = execute_sync('xinput --list-props ' + this.id);
         if (lines) {
             let match = /\sDevice Node \([0-9]+\):\s*\"(.*)\"/g.exec(lines[1].toString());
             if(match)
@@ -138,17 +76,12 @@ XInputManager.prototype = {
         return null;
     },
 
-    setDeviceEnabled: function(id, enabled) {
-        Util.spawnCommandLine('xinput set-prop ' + id + ' "Device Enabled" ' + (enabled ? '1' : '0'));
+    setEnabled: function(enabled) {
+        Util.spawnCommandLine('xinput set-prop ' + this.id + ' "Device Enabled" ' + (enabled ? '1' : '0'));
     },
 
-    enableAllDevices: function(devices, enabled) {
-        for (let i = 0; i < devices.length; i++)
-            this.setDeviceEnabled(devices[i], enabled);
-    },
-
-    isDeviceEnabled: function(id) {
-        var lines = execute_sync('xinput --list-props ' + id);
+    isEnabled: function() {
+        var lines = execute_sync('xinput --list-props ' + this.id);
         if (lines) {
             let match = /\sDevice Enabled \([0-9]+\):\s*1/g.exec(lines[1].toString());
             if(match)
@@ -156,16 +89,89 @@ XInputManager.prototype = {
         }
         return false;
     },
+};
+
+function XInputManager() {
+}
+
+XInputManager.prototype = {
+    refresh: function(config) {
+        this.touchscreens = [];
+        this.touchpads = [];
+        this.trackpoints = [];
+        this.mice = [];
+        
+        let devices = this.getAllPointerDevices();
+        for (let i = 0; i < devices.length; i++) {
+            let device = devices[i];
+            if(device.touchscreen)
+                this.touchscreens.push(device);
+            else if(device.touchpad)
+                this.touchpads.push(device);
+            else if(config.fakeTrackpoints.indexOf(device.name) != -1)
+                this.trackpoints.push(device);
+            else if(device.mouse)
+                this.mice.push(device);
+        }
+    },
+
+    getAllPointerDevices: function() {
+        var devices = new Array();
+        let lines = execute_sync('xinput --list');
+        if (lines) {
+            lines = lines[1].toString().split('\n');
+            for (let line = 0; line < lines.length; line++) {
+                if (lines[line].indexOf('pointer')!=-1 && lines[line].substr(5, 1) == ' ') {
+                    let match = /(.+)\sid=([0-9]+)/g.exec(lines[line].substr(6));
+                    if(match) {
+                        let device = new XInputPointerDevice(match[1].trim(), match[2]);
+                        if(device.node)
+                            devices.push(device);
+                    }
+                }
+            }
+        }
+        return devices;
+    },
+
+    enableAllDevices: function(devices, enabled) {
+        for (let i = 0; i < devices.length; i++)
+            devices[i].setEnabled(enabled);
+    },
 
     allDevicesEnabled: function(devices) {
         if (devices.length == 0)
             return false;
 
         for (let i = 0; i < devices.length; i++) {
-            if (!this.isDeviceEnabled(devices[i]))
+            if (!devices[i].isEnabled())
                 return false;
         }
         return true;
-    }
+    },
+    
+    addCommandDump: function(dump, command) {
+        dump.push(command);
+        let lines = execute_sync(command);
+        if (lines) {
+            lines = lines[1].toString().split('\n');
+            for (let line = 0; line < lines.length; line++)
+                dump.push(lines[line]);
+        } else {
+            dump.push('no result');
+        }
+        dump.push('======================');
+    },
+    
+    getDump: function() {
+        let devices = this.getAllPointerDevices();
+        let dump = [];
+        
+        this.addCommandDump(dump, 'xinput --list');
+    
+        for (let i = 0; i < devices.length; i++)
+            this.addCommandDump(dump, 'udevadm info --query=env --name=' + devices[i].node);
+        return dump.join('\n');
+    },
 };
 
