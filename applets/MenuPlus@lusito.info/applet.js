@@ -119,6 +119,13 @@ function ApplicationContextMenuItem(appButton, label, action) {
     this._init(appButton, label, action);
 }
 
+function file_make_own_executable(file) {
+    let info = file.query_info("unix::mode", Gio.FileQueryInfoFlags.NONE, null);
+    mode = info.get_attribute_uint32("unix::mode") | (1 << 6) // u+x bit
+    info.set_attribute_uint32("unix::mode", mode);
+    file.set_attributes_from_info(info, Gio.FileQueryInfoFlags.NONE, null);
+}
+
 ApplicationContextMenuItem.prototype = {
     __proto__: PopupMenu.PopupBaseMenuItem.prototype,
 
@@ -144,8 +151,7 @@ ApplicationContextMenuItem.prototype = {
                 let destFile = Gio.file_new_for_path(USER_DESKTOP_PATH+"/"+this._appButton.app.get_id());
                 try{
                     file.copy(destFile, 0, null, function(){});
-                    // Need to find a way to do that using the Gio library, but modifying the access::can-execute attribute on the file object seems unsupported
-                    Util.spawnCommandLine("chmod +x \""+USER_DESKTOP_PATH+"/"+this._appButton.app.get_id()+"\"");
+                    file_make_own_executable(destFile);
                 }catch(e){
                     global.log(e);
                 }
