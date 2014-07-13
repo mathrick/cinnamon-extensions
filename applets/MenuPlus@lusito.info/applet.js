@@ -32,6 +32,9 @@ const USER_DESKTOP_PATH = FileUtils.getUserDesktopDir();
 
 
 let appsys = Cinnamon.AppSystem.get_default();
+let uninstallScripts = ["/usr/bin/cinnamon-remove-app",
+                        "/usr/bin/cinnamon-remove-application",
+                       ]
 
 /* VisibleChildIterator takes a container (boxlayout, etc.)
  * and creates an array of its visible children and their index
@@ -154,15 +157,19 @@ ApplicationContextMenuItem.prototype = {
                 AppFavorites.getAppFavorites().removeFavorite(this._appButton.app.get_id());
                 break;
             case "uninstall":
-                if (this._appButton.app.get_id()){
-                    let uninstallScript = Gio.file_new_for_path("/usr/bin/cinnamon-remove-app");
-                    if (uninstallScript.query_exists(null)) {
-                        Util.spawnCommandLine("/usr/bin/cinnamon-remove-app " + this._appButton.app.get_id());
+                if (this._appButton.app.get_id()) {
+                    for(let i in uninstallScripts) {
+                        let executable = Gio.file_new_for_path(uninstallScripts[i]);
+                        if (executable.query_exists(null)) {
+                            Util.spawnCommandLine(uninstallScripts[i] + " " + this._appButton.app.get_id());
+                            this._appButton.menuApplet.menu.close();
+                            break;
+                        }
                     }
                 }
                 break;
         }
-        this._appButton.toggleMenu();
+        this._appButton.closeMenu();
         return false;
     }
 
@@ -384,10 +391,13 @@ GenericApplicationButton.prototype = {
                 this.menu.addMenuItem(menuItem);
             }
             if (this.app.get_id()){
-                let uninstallScript = Gio.file_new_for_path("/usr/bin/cinnamon-remove-app");
-                if (uninstallScript.query_exists(null)) {
-                    menuItem = new ApplicationContextMenuItem(this, _("Uninstall"), "uninstall");
-                    this.menu.addMenuItem(menuItem);
+                for(let i in uninstallScripts) {
+                    let executable = Gio.File.new_for_path(uninstallScripts[i]);
+                    if (executable.query_exists(null)) {
+                        menuItem = new ApplicationContextMenuItem(this, _("Uninstall"), "uninstall");
+                        this.menu.addMenuItem(menuItem);
+                        break;
+                    }
                 }
             }
         }
