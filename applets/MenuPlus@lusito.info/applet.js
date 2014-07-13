@@ -1845,12 +1845,12 @@ MyApplet.prototype = {
         }
     },
 
-    _setCategoriesButtonActive: function(active) {
+    _setCategoriesButtonActive: function(active, names) {
         try {
             let categoriesButtons = this.categoriesBox.get_children();
             for (let i in categoriesButtons) {
                 let button = categoriesButtons[i];
-                if (active){
+                if (active && (names == undefined || names.indexOf(button._delegate.name) > -1)) {
                     button.style_class = button._delegate.buttonStyle;
                 } else {
                     button.style_class = button._delegate.buttonStyleGreyed;
@@ -1890,6 +1890,7 @@ MyApplet.prototype = {
                     this._doSearchFilesystem();
                 else
                     this._doSearch();
+                this._setCategoriesButtonActive(true, this.matchingCategories);
             } else {
                 this._previousSearchPattern = "";
                 if (this._searchIconClickedId > 0)
@@ -1914,12 +1915,15 @@ MyApplet.prototype = {
         }
     },
 
-    _listButtons: function(buttons, pattern) {
+    _listButtons: function(buttons, pattern, callback) {
         let res = new Array();
         if (pattern){
             for (let i in buttons) {
                 if (buttons[i].search(pattern))
+                {
                     res.push(buttons[i].name);
+                    callback && callback(buttons[i]);
+                }
             }
         }
         return res;
@@ -2000,7 +2004,18 @@ MyApplet.prototype = {
             return false;
         }
 
-        var appResults = this._listButtons(this._applicationsButtons, pattern);
+        this.matchingCategories = [_("All Applications")];
+        let callback = function(button) {
+            for (let category in this.applicationsByCategory) {
+                if(this.applicationsByCategory[category].indexOf(button.app) > -1 &&
+                   this.matchingCategories.indexOf(category) == -1)
+                {
+                        this.matchingCategories.push(category);
+                }
+            }
+        }
+
+        var appResults = this._listButtons(this._applicationsButtons, pattern, Lang.bind(this, callback));
         var placesResults = !this.showPlaces ? null : this._listButtons(this._placesButtons, pattern);
         var recentResults = !this.showRecent ? null : this._listButtons(this._recentButtons, pattern);
 
