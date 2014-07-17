@@ -521,7 +521,8 @@ CategoryButton.prototype = {
     },
     
     _onEnter: function(manual) {
-        if (!this.menuApplet.searchActive) {
+        global.log("enter: " + this.active);
+        if (!this.menuApplet.searchActive || this.active) {
             if(manual)
                 this._onSelected();
             else
@@ -563,6 +564,7 @@ AppCategoryButton.prototype = {
     },
     
     _onSelected: function() {
+        global.log("selected: " + this.active);
         this.menuApplet._onEnterButton(this);
         this.menuApplet._selectCategory(this);
     }
@@ -1770,11 +1772,15 @@ MyApplet.prototype = {
     },
 
     _selectCategory : function(categoryButton) {
+        global.log("select cat: " + this.searchActive);
         categoryButton.actor.style_class = categoryButton.buttonStyleSelected;
         this._setSelectedCategoryButton(categoryButton);
 
         // Reset scrollbar
         this.applicationsScrollBox.get_vscroll_bar().get_adjustment().set_value(0);
+
+        let nameList = this.searchActive ? this.appResults : null;
+        global.log("nameList: " + nameList);
 
         this._displayAppButtonsForCategory(categoryButton.category);
         this.closeApplicationsContextMenus(null, false);
@@ -1798,7 +1804,7 @@ MyApplet.prototype = {
         }
     },
 
-    _displayAppButtonsForCategory: function(category){
+    _displayAppButtonsForCategory: function(category, nameList){
         this.applicationsBox.hide();
         this._displayButtons(null, this._placesButtons);
         this._displayButtons(null, this._recentButtons);
@@ -1807,7 +1813,8 @@ MyApplet.prototype = {
         } else {
             let categoryId = category.get_menu_id();
             this._applicationsButtons.forEach( function (item, index) {
-                if (item.category.indexOf(categoryId) != -1) {
+                if (item.category.indexOf(categoryId) != -1 &&
+                    (nameList == null || nameList.indexOf(item._delegate.name) != -1)) {
                     if (!item.actor.visible) {
                         item.actor.show();
                     }
@@ -1851,8 +1858,11 @@ MyApplet.prototype = {
             for (let i in categoriesButtons) {
                 let button = categoriesButtons[i];
                 if (active && (names == undefined || names.indexOf(button._delegate.name) > -1)) {
+                    button.active = true;
+                    names != undefined && global.log("activate! " + button._delegate.name);
                     button.style_class = button._delegate.buttonStyle;
                 } else {
+                    button.active = false;
                     button.style_class = button._delegate.buttonStyleGreyed;
                 }
              }
@@ -2018,6 +2028,10 @@ MyApplet.prototype = {
         var appResults = this._listButtons(this._applicationsButtons, pattern, Lang.bind(this, callback));
         var placesResults = !this.showPlaces ? null : this._listButtons(this._placesButtons, pattern);
         var recentResults = !this.showRecent ? null : this._listButtons(this._recentButtons, pattern);
+
+        this.appResults = appResults;
+        this.placesResults = placesResults;
+        this.recentResults = recentResults;
 
         this.applicationsBox.hide();
         this._resortButtons(true);
