@@ -932,14 +932,6 @@ MyApplet.prototype = {
         appsys.connect('installed-changed', Lang.bind(this, this._refreshApps));
         AppFavorites.getAppFavorites().connect('changed', Lang.bind(this, this._refreshFavs));
 
-        global.display.connect('overlay-key', Lang.bind(this, function(){
-            try{
-                this.menu.toggle();
-            }
-            catch(e) {
-                global.logError(e);
-            }
-        }));
         Main.placesManager.connect('places-updated', Lang.bind(this, this._refreshPlaces));
         this.RecentManager.connect('changed', Lang.bind(this, this._refreshRecent));
 
@@ -957,16 +949,31 @@ MyApplet.prototype = {
 
         /* Now we'll proceed with setting up individual setting bindings. */
 
-        this.settings.bindProperty(Settings.BindingDirection.ONE_WAY, "show-recent", "showRecent", this._refreshRecent);
-        this.settings.bindProperty(Settings.BindingDirection.ONE_WAY, "show-places", "showPlaces", this._refreshPlaces);
-        this.settings.bindProperty(Settings.BindingDirection.ONE_WAY, "show-favorites", "showFavorites", this._refreshFavs);
-        this.settings.bindProperty(Settings.BindingDirection.ONE_WAY, "show-system-buttons", "showSystemButtons", this._refreshFavs);
-        this.settings.bindProperty(Settings.BindingDirection.ONE_WAY, "show-appinfo-title", "showAppInfoTitle", this._refreshAppInfo);
-        this.settings.bindProperty(Settings.BindingDirection.ONE_WAY, "show-appinfo-description", "showAppInfoDescription", this._refreshAppInfo);
-        this.settings.bindProperty(Settings.BindingDirection.ONE_WAY, "activate-on-hover", "activateOnHover", this._refreshActivateOnHover);
-        this.settings.bindProperty(Settings.BindingDirection.ONE_WAY, "icon", "menuIcon", this._updateIcon);
-        this.settings.bindProperty(Settings.BindingDirection.ONE_WAY, "icon-symbolic", "useSymbolicIcon", this._updateIcon);
-        this.settings.bindProperty(Settings.BindingDirection.ONE_WAY, "text", "menuText", this._updateLabel);
+        this.settings.bindProperty(Settings.BindingDirection.IN, "show-recent", "showRecent", this._refreshRecent);
+        this.settings.bindProperty(Settings.BindingDirection.IN, "show-places", "showPlaces", this._refreshPlaces);
+        this.settings.bindProperty(Settings.BindingDirection.IN, "show-favorites", "showFavorites", this._refreshFavs);
+        this.settings.bindProperty(Settings.BindingDirection.IN, "show-system-buttons", "showSystemButtons", this._refreshFavs);
+        this.settings.bindProperty(Settings.BindingDirection.IN, "show-appinfo-title", "showAppInfoTitle", this._refreshAppInfo);
+        this.settings.bindProperty(Settings.BindingDirection.IN, "show-appinfo-description", "showAppInfoDescription", this._refreshAppInfo);
+        this.settings.bindProperty(Settings.BindingDirection.IN, "activate-on-hover", "activateOnHover", this._refreshActivateOnHover);
+        this.settings.bindProperty(Settings.BindingDirection.IN, "icon", "menuIcon", this._updateIcon);
+        this.settings.bindProperty(Settings.BindingDirection.IN, "icon-symbolic", "useSymbolicIcon", this._updateIcon);
+        this.settings.bindProperty(Settings.BindingDirection.IN, "text", "menuText", this._updateLabel);
+        this.settings.bindProperty(Settings.BindingDirection.IN, "overlay-key", "overlayKey", this._updateKeybinding, null);
+    },
+
+    _updateKeybinding: function() {
+        Main.keybindingManager.addHotKey("overlay-key", this.overlayKey, Lang.bind(this, function() {
+            if (!Main.overview.visible && !Main.expo.visible)
+            {
+                try{
+                    this.menu.toggle();
+                }
+                catch(e) {
+                    global.logError(e);
+                }
+            }
+        }));
     },
     
     _loadInitialApps: function() {
